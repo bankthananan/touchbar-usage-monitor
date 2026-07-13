@@ -2,6 +2,8 @@
 
 A small native macOS utility that puts Claude Code, Antigravity, and Codex quota usage on the physical Touch Bar whenever Warp is frontmost.
 
+![Touch Bar Usage Monitor showing Claude, Antigravity, and Codex quota cards](docs/images/touchbar-preview.png)
+
 Each card shows the percentage **used** for the provider's 5-hour and 7-day/weekly windows, plus the time remaining until reset. A dash means the provider did not return that window.
 
 > [!IMPORTANT]
