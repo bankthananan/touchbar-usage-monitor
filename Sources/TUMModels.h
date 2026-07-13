@@ -21,6 +21,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, copy) NSString *groupID;
 @property (nonatomic, copy) NSString *displayName;
+@property (nonatomic, copy) NSString *fiveHourLabel;
+@property (nonatomic, copy) NSString *sevenDayLabel;
 @property (nonatomic, strong) TUMWindowUsage *fiveHour;
 @property (nonatomic, strong) TUMWindowUsage *sevenDay;
 

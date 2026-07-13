@@ -379,3 +379,94 @@ TUMProviderUsage *TUMParseAntigravityOutput(NSString *output,
     }
     return usage;
 }
+
+static double TUMNumberFromCapturedString(NSString *text) {
+    return [[text stringByReplacingOccurrencesOfString:@"," withString:@""] doubleValue];
+}
+
+static NSDate *TUMNextCopilotResetDate(NSDate *now) {
+    NSCalendar *calendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
+    calendar.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+    NSDateComponents *components = [calendar components:(NSCalendarUnitYear | NSCalendarUnitMonth)
+                                               fromDate:now];
+    components.day = 1;
+    components.hour = 0;
+    components.minute = 0;
+    components.second = 0;
+    components.month += 1;
+    return [calendar dateFromComponents:components];
+}
+
+TUMProviderUsage *TUMParseCopilotOutput(NSString *output,
+                                       NSDate *now,
+                                       NSError **error) {
+    NSString *text = TUMStripTerminalControlSequences(output);
+    NSRegularExpression *fractionRegex = [NSRegularExpression
+        regularExpressionWithPattern:@"([0-9][0-9,.]*(?:\\.[0-9]+)?)\\s*/\\s*([0-9][0-9,.]*(?:\\.[0-9]+)?)\\s*(AIC|AI\\s*credits?|premium\\s*requests?)?"
+        options:NSRegularExpressionCaseInsensitive
+        error:nil];
+    NSArray<NSTextCheckingResult *> *matches = [fractionRegex
+        matchesInString:text options:0 range:NSMakeRange(0, text.length)];
+
+    NSTextCheckingResult *selected = nil;
+    for (NSTextCheckingResult *match in [matches reverseObjectEnumerator]) {
+        NSString *totalText = [text substringWithRange:[match rangeAtIndex:2]];
+        if (TUMNumberFromCapturedString(totalText) > 0.0) {
+            selected = match;
+            break;
+        }
+    }
+
+    double usedPercent = 0.0;
+    BOOL hasUsage = selected != nil;
+    NSString *unit = @"";
+    if (selected != nil) {
+        double used = TUMNumberFromCapturedString(
+            [text substringWithRange:[selected rangeAtIndex:1]]
+        );
+        double total = TUMNumberFromCapturedString(
+            [text substringWithRange:[selected rangeAtIndex:2]]
+        );
+        usedPercent = total > 0.0 ? (used / total) * 100.0 : 0.0;
+        NSRange unitRange = [selected rangeAtIndex:3];
+        if (unitRange.location != NSNotFound) {
+            unit = [text substringWithRange:unitRange];
+        }
+    }
+
+    if (!hasUsage) {
+        NSRegularExpression *percentRegex = [NSRegularExpression
+            regularExpressionWithPattern:@"([0-9]+(?:\\.[0-9]+)?)%\\s*used"
+            options:NSRegularExpressionCaseInsensitive
+            error:nil];
+        NSArray<NSTextCheckingResult *> *percentMatches = [percentRegex
+            matchesInString:text options:0 range:NSMakeRange(0, text.length)];
+        NSTextCheckingResult *percentMatch = percentMatches.lastObject;
+        if (percentMatch != nil) {
+            usedPercent = [[text substringWithRange:[percentMatch rangeAtIndex:1]] doubleValue];
+            hasUsage = YES;
+        }
+    }
+
+    if (!hasUsage) {
+        if (error != NULL) {
+            *error = TUMParserError(@"Copilot `/usage` output has no readable monthly quota.");
+        }
+        return nil;
+    }
+
+    BOOL isAICredits = [unit rangeOfString:@"AIC" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [unit rangeOfString:@"credit" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+        [text rangeOfString:@"AI Credits" options:NSCaseInsensitiveSearch].location != NSNotFound;
+    TUMProviderUsage *usage = [TUMProviderUsage usageForProviderID:@"copilot"
+                                                       displayName:@"Copilot"];
+    TUMQuotaGroup *group = [TUMQuotaGroup groupWithID:(isAICredits ? @"ai_credits" : @"premium")
+                                           displayName:(isAICredits ? @"AI Credits" : @"Premium")];
+    group.fiveHourLabel = @"MO";
+    group.sevenDayLabel = @"";
+    group.fiveHour = [TUMWindowUsage windowWithUsedPercent:usedPercent
+                                             windowMinutes:43200
+                                                 resetDate:TUMNextCopilotResetDate(now)];
+    usage.quotaGroups = @[group];
+    return usage;
+}

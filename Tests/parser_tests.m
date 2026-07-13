@@ -109,6 +109,41 @@ static void TestAntigravityDisabled(void) {
     Assert(!usage.fiveHour.available, @"Disabled 5H remains unavailable");
 }
 
+static void TestCopilotAICredits(void) {
+    NSString *output = @"AI Credits 70 (24s)\nPlan 35% used\n70 / 200 AIC\n";
+    NSDate *now = [NSDate dateWithTimeIntervalSince1970:1783951200];
+    NSError *error = nil;
+    TUMProviderUsage *usage = TUMParseCopilotOutput(output, now, &error);
+    Assert(usage != nil && error == nil, @"Copilot AI Credits output parsed");
+    Assert([usage.quotaGroups.firstObject.displayName isEqualToString:@"AI Credits"],
+           @"Copilot AI Credits group named");
+    Assert([usage.quotaGroups.firstObject.fiveHourLabel isEqualToString:@"MO"],
+           @"Copilot monthly row labeled");
+    Assert(usage.quotaGroups.firstObject.sevenDayLabel.length == 0,
+           @"Copilot hides unused second row");
+    Assert(fabs(usage.fiveHour.usedPercent - 35.0) < 0.01,
+           @"Copilot used credits normalized");
+
+    NSCalendar *calendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
+    calendar.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+    NSDateComponents *reset = [calendar components:(NSCalendarUnitYear | NSCalendarUnitMonth |
+                                                     NSCalendarUnitDay | NSCalendarUnitHour)
+                                           fromDate:usage.fiveHour.resetDate];
+    Assert(reset.year == 2026 && reset.month == 8 && reset.day == 1 && reset.hour == 0,
+           @"Copilot monthly reset uses first day at midnight UTC");
+}
+
+static void TestCopilotLegacyPremiumRequests(void) {
+    NSString *output = @"Premium requests\n12 / 300 premium requests\n4% used\n";
+    NSError *error = nil;
+    TUMProviderUsage *usage = TUMParseCopilotOutput(output, [NSDate date], &error);
+    Assert(usage != nil && error == nil, @"Copilot legacy premium requests parsed");
+    Assert([usage.quotaGroups.firstObject.displayName isEqualToString:@"Premium"],
+           @"Copilot legacy quota group named");
+    Assert(fabs(usage.fiveHour.usedPercent - 4.0) < 0.01,
+           @"Copilot legacy usage normalized");
+}
+
 static void TestCountdownFormatting(void) {
     NSDate *now = [NSDate dateWithTimeIntervalSince1970:1000];
     Assert([TUMResetCountdown([now dateByAddingTimeInterval:4 * 3600 + 3 * 60], now)
@@ -124,6 +159,8 @@ int main(void) {
         TestCodexWeeklyOnly();
         TestAntigravityParser();
         TestAntigravityDisabled();
+        TestCopilotAICredits();
+        TestCopilotLegacyPremiumRequests();
         TestCountdownFormatting();
         if (failures == 0) {
             printf("All parser tests passed.\n");

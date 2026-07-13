@@ -8,16 +8,31 @@
 @property (nonatomic, strong) NSMenu *statusMenu;
 @property (nonatomic, strong) NSMenuItem *focusItem;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSMenuItem *> *providerMenuItems;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSMenuItem *> *visibilityMenuItems;
 @property (nonatomic, strong) TUMUsageMonitor *usageMonitor;
 @property (nonatomic, strong) TUMTouchBarController *touchBarController;
 @property (nonatomic) BOOL warpIsFrontmost;
 @end
+
+static NSArray<NSString *> *TUMMenuProviderIDs(void) {
+    return @[@"claude", @"antigravity", @"codex", @"copilot"];
+}
+
+static NSDictionary<NSString *, NSString *> *TUMMenuProviderNames(void) {
+    return @{
+        @"claude": @"Claude",
+        @"antigravity": @"Antigravity",
+        @"codex": @"Codex",
+        @"copilot": @"Copilot"
+    };
+}
 
 @implementation TUMAppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
     (void)notification;
     self.providerMenuItems = [NSMutableDictionary dictionary];
+    self.visibilityMenuItems = [NSMutableDictionary dictionary];
     self.usageMonitor = [[TUMUsageMonitor alloc] init];
     self.touchBarController = [[TUMTouchBarController alloc]
         initWithUsage:self.usageMonitor.usageByProvider];
@@ -62,7 +77,26 @@
     [self.statusMenu addItem:self.focusItem];
     [self.statusMenu addItem:NSMenuItem.separatorItem];
 
-    for (NSString *providerID in @[@"claude", @"antigravity", @"codex"]) {
+    NSMenuItem *bandsTitle = [[NSMenuItem alloc] initWithTitle:@"Visible Touch Bar bands"
+                                                        action:nil
+                                                 keyEquivalent:@""];
+    bandsTitle.enabled = NO;
+    [self.statusMenu addItem:bandsTitle];
+    for (NSString *providerID in TUMMenuProviderIDs()) {
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:TUMMenuProviderNames()[providerID]
+                                                     action:@selector(toggleProviderBand:)
+                                              keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = providerID;
+        item.state = [self.touchBarController.visibleProviderIDs containsObject:providerID]
+            ? NSControlStateValueOn
+            : NSControlStateValueOff;
+        self.visibilityMenuItems[providerID] = item;
+        [self.statusMenu addItem:item];
+    }
+    [self.statusMenu addItem:NSMenuItem.separatorItem];
+
+    for (NSString *providerID in TUMMenuProviderIDs()) {
         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Loading…"
                                                      action:nil
                                               keyEquivalent:@""];
@@ -99,7 +133,7 @@
 
 - (void)rebuildUsageMenu:(NSDictionary<NSString *, TUMProviderUsage *> *)usage {
     NSDate *now = [NSDate date];
-    for (NSString *providerID in @[@"claude", @"antigravity", @"codex"]) {
+    for (NSString *providerID in TUMMenuProviderIDs()) {
         TUMProviderUsage *providerUsage = usage[providerID];
         TUMQuotaGroup *group = providerUsage.quotaGroups.firstObject;
         NSString *detail = nil;
@@ -113,14 +147,36 @@
                    group.displayName,
                    (unsigned long)(providerUsage.quotaGroups.count - 1)]
                 : @"";
-            detail = [NSString stringWithFormat:@"5H %@  ·  7D %@%@",
-                      TUMCompactWindowText(group.fiveHour, now),
-                      TUMCompactWindowText(group.sevenDay, now),
+            NSMutableArray<NSString *> *windows = [NSMutableArray array];
+            if (group.fiveHourLabel.length > 0) {
+                [windows addObject:[NSString stringWithFormat:@"%@ %@",
+                    group.fiveHourLabel,
+                    TUMCompactWindowText(group.fiveHour, now)]];
+            }
+            if (group.sevenDayLabel.length > 0) {
+                [windows addObject:[NSString stringWithFormat:@"%@ %@",
+                    group.sevenDayLabel,
+                    TUMCompactWindowText(group.sevenDay, now)]];
+            }
+            detail = [NSString stringWithFormat:@"%@%@",
+                      [windows componentsJoinedByString:@"  ·  "],
                       groupSuffix];
         }
         self.providerMenuItems[providerID].title = [NSString
             stringWithFormat:@"%@: %@", providerUsage.displayName, detail];
     }
+}
+
+- (void)toggleProviderBand:(NSMenuItem *)sender {
+    NSString *providerID = [sender.representedObject isKindOfClass:NSString.class]
+        ? sender.representedObject
+        : nil;
+    if (providerID == nil) {
+        return;
+    }
+    BOOL shouldShow = sender.state != NSControlStateValueOn;
+    [self.touchBarController setProviderID:providerID visible:shouldShow];
+    sender.state = shouldShow ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
 - (void)observeActiveApplication {

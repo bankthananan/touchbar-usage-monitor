@@ -39,6 +39,8 @@
     TUMQuotaGroup *group = [[self alloc] init];
     group.groupID = groupID;
     group.displayName = displayName;
+    group.fiveHourLabel = @"5H";
+    group.sevenDayLabel = @"7D";
     group.fiveHour = [TUMWindowUsage unavailableWithNote:nil];
     group.sevenDay = [TUMWindowUsage unavailableWithNote:nil];
     return group;
@@ -48,6 +50,8 @@
     TUMQuotaGroup *copy = [[[self class] allocWithZone:zone] init];
     copy.groupID = self.groupID;
     copy.displayName = self.displayName;
+    copy.fiveHourLabel = self.fiveHourLabel;
+    copy.sevenDayLabel = self.sevenDayLabel;
     copy.fiveHour = [self.fiveHour copy];
     copy.sevenDay = [self.sevenDay copy];
     return copy;

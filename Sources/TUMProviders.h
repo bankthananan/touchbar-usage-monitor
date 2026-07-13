@@ -25,6 +25,9 @@ typedef void (^TUMProviderCompletion)(TUMProviderUsage *_Nullable usage,
 @interface TUMAntigravityProvider : NSObject <TUMUsageProvider>
 @end
 
+@interface TUMCopilotProvider : NSObject <TUMUsageProvider>
+@end
+
 FOUNDATION_EXPORT NSString *_Nullable TUMFindExecutable(NSArray<NSString *> *candidates);
 
 NS_ASSUME_NONNULL_END

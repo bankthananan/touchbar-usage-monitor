@@ -17,7 +17,8 @@ int main(int argc, const char *argv[]) {
         NSArray<id<TUMUsageProvider>> *allProviders = @[
             [[TUMClaudeProvider alloc] init],
             [[TUMCodexProvider alloc] init],
-            [[TUMAntigravityProvider alloc] init]
+            [[TUMAntigravityProvider alloc] init],
+            [[TUMCopilotProvider alloc] init]
         ];
         NSString *filter = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : nil;
         __block int failures = 0;
@@ -38,10 +39,12 @@ int main(int argc, const char *argv[]) {
                            description.UTF8String);
                 } else {
                     for (TUMQuotaGroup *group in usage.quotaGroups) {
-                        printf("%s/%s  5H %s  7D %s\n",
+                        printf("%s/%s  %s %s  %s %s\n",
                                usage.displayName.UTF8String,
                                group.displayName.UTF8String,
+                               group.fiveHourLabel.UTF8String,
                                WindowDescription(group.fiveHour).UTF8String,
+                               group.sevenDayLabel.UTF8String,
                                WindowDescription(group.sevenDay).UTF8String);
                     }
                 }

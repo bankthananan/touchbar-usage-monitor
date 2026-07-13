@@ -20,6 +20,12 @@ FOUNDATION_EXPORT TUMProviderUsage *_Nullable TUMParseAntigravityOutput(
     NSError **error
 );
 
+FOUNDATION_EXPORT TUMProviderUsage *_Nullable TUMParseCopilotOutput(
+    NSString *output,
+    NSDate *now,
+    NSError **error
+);
+
 FOUNDATION_EXPORT NSString *TUMStripTerminalControlSequences(NSString *input);
 FOUNDATION_EXPORT NSTimeInterval TUMParseCountdown(NSString *input);
 

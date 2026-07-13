@@ -18,7 +18,8 @@
         _providers = @[
             [[TUMClaudeProvider alloc] init],
             [[TUMAntigravityProvider alloc] init],
-            [[TUMCodexProvider alloc] init]
+            [[TUMCodexProvider alloc] init],
+            [[TUMCopilotProvider alloc] init]
         ];
         _mutableUsage = [NSMutableDictionary dictionary];
         _lastAttempts = [NSMutableDictionary dictionary];
@@ -27,7 +28,8 @@
         NSDictionary *names = @{
             @"claude": @"Claude",
             @"antigravity": @"Antigravity",
-            @"codex": @"Codex"
+            @"codex": @"Codex",
+            @"copilot": @"Copilot"
         };
         for (id<TUMUsageProvider> provider in _providers) {
             TUMProviderUsage *placeholder = [TUMProviderUsage

@@ -8,9 +8,11 @@
 static NSTouchBarItemIdentifier const TUMClaudeItem = @"com.local.touchbarusage.claude";
 static NSTouchBarItemIdentifier const TUMAntigravityItem = @"com.local.touchbarusage.antigravity";
 static NSTouchBarItemIdentifier const TUMCodexItem = @"com.local.touchbarusage.codex";
+static NSTouchBarItemIdentifier const TUMCopilotItem = @"com.local.touchbarusage.copilot";
 static NSTouchBarItemIdentifier const TUMRefreshItem = @"com.local.touchbarusage.refresh";
 static NSString *const TUMProviderOrderDefaultsKey = @"TUMProviderOrder";
 static NSString *const TUMSelectedGroupsDefaultsKey = @"TUMSelectedQuotaGroups";
+static NSString *const TUMVisibleProvidersDefaultsKey = @"TUMVisibleProviders";
 
 typedef void (*TUMPresentFunction)(id, SEL, NSTouchBar *, NSInteger, id);
 typedef void (*TUMDismissFunction)(id, SEL, NSTouchBar *);
@@ -20,12 +22,13 @@ typedef void (*TUMDismissFunction)(id, SEL, NSTouchBar *);
 @property (nonatomic, copy) NSDictionary<NSString *, TUMProviderUsage *> *usage;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, TUMUsageCardView *> *cards;
 @property (nonatomic, copy) NSArray<NSString *> *providerOrder;
+@property (nonatomic, strong) NSMutableSet<NSString *> *visibleProviderSet;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *selectedGroupIDs;
 @property (nonatomic, readwrite) BOOL isPresented;
 @end
 
 static NSArray<NSString *> *TUMDefaultProviderOrder(void) {
-    return @[@"claude", @"antigravity", @"codex"];
+    return @[@"claude", @"antigravity", @"codex", @"copilot"];
 }
 
 static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerID) {
@@ -35,7 +38,10 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
     if ([providerID isEqualToString:@"antigravity"]) {
         return TUMAntigravityItem;
     }
-    return TUMCodexItem;
+    if ([providerID isEqualToString:@"codex"]) {
+        return TUMCodexItem;
+    }
+    return TUMCopilotItem;
 }
 
 @implementation TUMTouchBarController
@@ -60,6 +66,17 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
             }
         }
         _providerOrder = normalizedOrder;
+        id savedVisibilityValue = [NSUserDefaults.standardUserDefaults
+            objectForKey:TUMVisibleProvidersDefaultsKey];
+        NSArray<NSString *> *savedVisibility = [savedVisibilityValue isKindOfClass:NSArray.class]
+            ? savedVisibilityValue
+            : TUMDefaultProviderOrder();
+        _visibleProviderSet = [NSMutableSet set];
+        for (NSString *providerID in savedVisibility) {
+            if ([TUMDefaultProviderOrder() containsObject:providerID]) {
+                [_visibleProviderSet addObject:providerID];
+            }
+        }
         NSDictionary<NSString *, NSString *> *savedGroups = [NSUserDefaults.standardUserDefaults
             dictionaryForKey:TUMSelectedGroupsDefaultsKey];
         _selectedGroupIDs = savedGroups != nil
@@ -68,7 +85,7 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
         _touchBar = [[NSTouchBar alloc] init];
         _touchBar.delegate = self;
         NSMutableArray<NSTouchBarItemIdentifier> *identifiers = [NSMutableArray array];
-        for (NSString *providerID in _providerOrder) {
+        for (NSString *providerID in self.visibleProviderIDs) {
             [identifiers addObject:TUMItemIdentifierForProvider(providerID)];
         }
         [identifiers addObject:TUMRefreshItem];
@@ -84,13 +101,64 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
 
 - (void)updateUsage:(NSDictionary<NSString *,TUMProviderUsage *> *)usage {
     self.usage = [usage copy];
-    for (NSString *providerID in @[@"claude", @"antigravity", @"codex"]) {
+    for (NSString *providerID in TUMDefaultProviderOrder()) {
         TUMUsageCardView *card = self.cards[providerID];
         if (card != nil && usage[providerID] != nil) {
             card.usage = usage[providerID];
             card.displayedGroupIndex = [self selectedGroupIndexForUsage:usage[providerID]];
         }
     }
+}
+
+- (NSArray<NSString *> *)visibleProviderIDs {
+    NSMutableArray<NSString *> *visible = [NSMutableArray array];
+    for (NSString *providerID in self.providerOrder) {
+        if ([self.visibleProviderSet containsObject:providerID]) {
+            [visible addObject:providerID];
+        }
+    }
+    return visible;
+}
+
+- (NSArray<NSTouchBarItemIdentifier> *)currentTouchBarItemIdentifiers {
+    NSMutableArray<NSTouchBarItemIdentifier> *identifiers = [NSMutableArray array];
+    for (NSString *providerID in self.visibleProviderIDs) {
+        [identifiers addObject:TUMItemIdentifierForProvider(providerID)];
+    }
+    [identifiers addObject:TUMRefreshItem];
+    return identifiers;
+}
+
+- (void)applyCurrentTouchBarItems {
+    BOOL shouldRestore = self.isPresented;
+    if (shouldRestore) {
+        [self dismiss];
+    }
+    self.touchBar.defaultItemIdentifiers = self.currentTouchBarItemIdentifiers;
+    if (shouldRestore) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(80 * NSEC_PER_MSEC)),
+                       dispatch_get_main_queue(), ^{
+            [self present];
+        });
+    }
+}
+
+- (void)setProviderID:(NSString *)providerID visible:(BOOL)visible {
+    if (![TUMDefaultProviderOrder() containsObject:providerID]) {
+        return;
+    }
+    BOOL currentlyVisible = [self.visibleProviderSet containsObject:providerID];
+    if (currentlyVisible == visible) {
+        return;
+    }
+    if (visible) {
+        [self.visibleProviderSet addObject:providerID];
+    } else {
+        [self.visibleProviderSet removeObject:providerID];
+    }
+    [NSUserDefaults.standardUserDefaults setObject:self.visibleProviderIDs
+                                            forKey:TUMVisibleProvidersDefaultsKey];
+    [self applyCurrentTouchBarItems];
 }
 
 - (NSUInteger)selectedGroupIndexForUsage:(TUMProviderUsage *)usage {
@@ -129,7 +197,8 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
 }
 
 - (void)reorderProviderID:(NSString *)providerID byPositions:(NSInteger)positions {
-    NSUInteger fromIndex = [self.providerOrder indexOfObject:providerID];
+    NSArray<NSString *> *visibleOrder = self.visibleProviderIDs;
+    NSUInteger fromIndex = [visibleOrder indexOfObject:providerID];
     if (fromIndex == NSNotFound || positions == 0) {
         return;
     }
@@ -137,34 +206,22 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
     NSInteger to = from + positions;
     if (to < 0) {
         to = 0;
-    } else if (to >= (NSInteger)self.providerOrder.count) {
-        to = (NSInteger)self.providerOrder.count - 1;
+    } else if (to >= (NSInteger)visibleOrder.count) {
+        to = (NSInteger)visibleOrder.count - 1;
     }
     if (to == from) {
         return;
     }
     NSMutableArray<NSString *> *order = [self.providerOrder mutableCopy];
-    [order removeObjectAtIndex:(NSUInteger)from];
-    [order insertObject:providerID atIndex:(NSUInteger)to];
+    NSString *targetProviderID = visibleOrder[(NSUInteger)to];
+    [order removeObject:providerID];
+    NSUInteger targetIndex = [order indexOfObject:targetProviderID];
+    NSUInteger insertionIndex = to > from ? targetIndex + 1 : targetIndex;
+    [order insertObject:providerID atIndex:insertionIndex];
     self.providerOrder = order;
     [NSUserDefaults.standardUserDefaults setObject:order forKey:TUMProviderOrderDefaultsKey];
 
-    NSMutableArray<NSTouchBarItemIdentifier> *identifiers = [NSMutableArray array];
-    for (NSString *orderedProviderID in order) {
-        [identifiers addObject:TUMItemIdentifierForProvider(orderedProviderID)];
-    }
-    [identifiers addObject:TUMRefreshItem];
-    BOOL shouldRestore = self.isPresented;
-    if (shouldRestore) {
-        [self dismiss];
-    }
-    self.touchBar.defaultItemIdentifiers = identifiers;
-    if (shouldRestore) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(80 * NSEC_PER_MSEC)),
-                       dispatch_get_main_queue(), ^{
-            [self present];
-        });
-    }
+    [self applyCurrentTouchBarItems];
 }
 
 - (NSTouchBarItem *)touchBar:(NSTouchBar *)touchBar
@@ -173,7 +230,8 @@ static NSTouchBarItemIdentifier TUMItemIdentifierForProvider(NSString *providerI
     NSDictionary *providerByIdentifier = @{
         TUMClaudeItem: @"claude",
         TUMAntigravityItem: @"antigravity",
-        TUMCodexItem: @"codex"
+        TUMCodexItem: @"codex",
+        TUMCopilotItem: @"copilot"
     };
     NSString *providerID = providerByIdentifier[identifier];
     if (providerID != nil) {

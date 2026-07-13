@@ -9,7 +9,10 @@ static NSColor *TUMProviderColor(NSString *providerID) {
     if ([providerID isEqualToString:@"antigravity"]) {
         return [NSColor colorWithRed:0.38 green:0.52 blue:1.0 alpha:1.0];
     }
-    return [NSColor colorWithRed:0.57 green:0.36 blue:0.93 alpha:1.0];
+    if ([providerID isEqualToString:@"codex"]) {
+        return [NSColor colorWithRed:0.57 green:0.36 blue:0.93 alpha:1.0];
+    }
+    return [NSColor colorWithRed:0.18 green:0.68 blue:0.62 alpha:1.0];
 }
 
 static NSString *TUMCardName(TUMProviderUsage *usage) {
@@ -26,7 +29,10 @@ static NSString *TUMProviderGlyph(NSString *providerID) {
     if ([providerID isEqualToString:@"antigravity"]) {
         return @"A";
     }
-    return @"X";
+    if ([providerID isEqualToString:@"codex"]) {
+        return @"X";
+    }
+    return @"G";
 }
 
 static NSColor *TUMUsageColor(double usedPercent) {
@@ -58,9 +64,9 @@ static void TUMDrawQuotaRow(NSString *label,
         NSForegroundColorAttributeName: [NSColor colorWithWhite:0.72 alpha:1.0]
     };
 
-    [label drawInRect:NSMakeRect(98, y, 15, 9) withAttributes:labelAttributes];
+    [label drawInRect:NSMakeRect(84, y, 14, 9) withAttributes:labelAttributes];
 
-    NSRect trackRect = NSMakeRect(115, y + 3.0, 48, 3.5);
+    NSRect trackRect = NSMakeRect(100, y + 3.0, 38, 3.5);
     [[NSColor colorWithWhite:0.23 alpha:1.0] setFill];
     [[NSBezierPath bezierPathWithRoundedRect:trackRect xRadius:1.75 yRadius:1.75] fill];
     if (window.available) {
@@ -84,8 +90,8 @@ static void TUMDrawQuotaRow(NSString *label,
         ? [NSString stringWithFormat:@"%.0f%%", window.usedPercent]
         : @"—";
     NSString *reset = window.available ? TUMResetCountdown(window.resetDate, now) : @"—";
-    [percent drawInRect:NSMakeRect(168, y, 32, 9) withAttributes:valueAttributes];
-    [reset drawInRect:NSMakeRect(202, y, 52, 9) withAttributes:resetAttributes];
+    [percent drawInRect:NSMakeRect(143, y, 30, 9) withAttributes:valueAttributes];
+    [reset drawInRect:NSMakeRect(176, y, 48, 9) withAttributes:resetAttributes];
 }
 
 @interface TUMUsageCardView () <NSGestureRecognizerDelegate>
@@ -95,7 +101,7 @@ static void TUMDrawQuotaRow(NSString *label,
 @implementation TUMUsageCardView
 
 - (instancetype)initWithUsage:(TUMProviderUsage *)usage {
-    self = [super initWithFrame:NSMakeRect(0, 0, 260, 30)];
+    self = [super initWithFrame:NSMakeRect(0, 0, 230, 30)];
     if (self) {
         _usage = usage;
         self.wantsLayer = YES;
@@ -113,7 +119,7 @@ static void TUMDrawQuotaRow(NSString *label,
         _panRecognizer.delegate = self;
         [self addGestureRecognizer:_clickRecognizer];
         [self addGestureRecognizer:_panRecognizer];
-        [self.widthAnchor constraintEqualToConstant:260.0].active = YES;
+        [self.widthAnchor constraintEqualToConstant:230.0].active = YES;
         [self.heightAnchor constraintEqualToConstant:30.0].active = YES;
     }
     return self;
@@ -187,7 +193,7 @@ static void TUMDrawQuotaRow(NSString *label,
         withAttributes:centeredGlyphAttributes];
 
     [[NSColor colorWithWhite:1.0 alpha:0.10] setFill];
-    NSRectFill(NSMakeRect(92, 5, 0.5, 20));
+    NSRectFill(NSMakeRect(78, 5, 0.5, 20));
 
     NSDate *now = [NSDate date];
     NSUInteger groupCount = self.usage.quotaGroups.count;
@@ -219,9 +225,9 @@ static void TUMDrawQuotaRow(NSString *label,
         NSFontAttributeName: [NSFont systemFontOfSize:6.8 weight:NSFontWeightRegular],
         NSForegroundColorAttributeName: [NSColor colorWithWhite:0.68 alpha:1.0]
     };
-    [title drawInRect:NSMakeRect(29, 16, 60, 10)
+    [title drawInRect:NSMakeRect(29, 16, 46, 10)
        withAttributes:titleAttributes];
-    [groupName drawInRect:NSMakeRect(29, 5, 60, 9)
+    [groupName drawInRect:NSMakeRect(29, 5, 46, 9)
            withAttributes:groupAttributes];
 
     TUMWindowUsage *fiveHour = group != nil
@@ -230,8 +236,14 @@ static void TUMDrawQuotaRow(NSString *label,
     TUMWindowUsage *sevenDay = group != nil
         ? group.sevenDay
         : [TUMWindowUsage unavailableWithNote:nil];
-    TUMDrawQuotaRow(@"5H", fiveHour, now, 16);
-    TUMDrawQuotaRow(@"7D", sevenDay, now, 5);
+    NSString *fiveHourLabel = group != nil ? group.fiveHourLabel : @"5H";
+    NSString *sevenDayLabel = group != nil ? group.sevenDayLabel : @"7D";
+    if (sevenDayLabel.length == 0) {
+        TUMDrawQuotaRow(fiveHourLabel, fiveHour, now, 10.5);
+    } else {
+        TUMDrawQuotaRow(fiveHourLabel, fiveHour, now, 16);
+        TUMDrawQuotaRow(sevenDayLabel, sevenDay, now, 5);
+    }
 }
 
 @end

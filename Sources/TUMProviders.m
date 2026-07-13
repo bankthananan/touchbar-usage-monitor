@@ -78,7 +78,7 @@ NSString *TUMFindExecutable(NSArray<NSString *> *candidates) {
     forHTTPHeaderField:@"Authorization"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"oauth-2025-04-20" forHTTPHeaderField:@"anthropic-beta"];
-    [request setValue:@"TouchBarUsageMonitor/0.3.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"TouchBarUsageMonitor/0.4.0" forHTTPHeaderField:@"User-Agent"];
 
     NSURLSessionDataTask *task = [NSURLSession.sharedSession
         dataTaskWithRequest:request
@@ -198,7 +198,7 @@ NSString *TUMFindExecutable(NSArray<NSString *> *candidates) {
                 @"clientInfo": @{
                     @"name": @"touchbar_usage_monitor",
                     @"title": @"Touch Bar Usage Monitor",
-                    @"version": @"0.3.0"
+                    @"version": @"0.4.0"
                 },
                 @"capabilities": @{
                     @"optOutNotificationMethods": @[
@@ -366,6 +366,120 @@ NSString *TUMFindExecutable(NSArray<NSString *> *candidates) {
                 fprintf(stderr, "--- sanitized Antigravity tail ---\n%s\n--- end tail ---\n",
                         tail.UTF8String);
             }
+        }
+        completion(parsedUsage, parseError);
+    });
+}
+
+@end
+
+@implementation TUMCopilotProvider
+
+- (NSString *)providerID { return @"copilot"; }
+- (NSTimeInterval)minimumRefreshInterval { return 300.0; }
+
+- (void)refreshWithCompletion:(TUMProviderCompletion)completion {
+    NSString *copilot = TUMFindExecutable(@[
+        @"~/.local/bin/copilot",
+        @"/opt/homebrew/bin/copilot",
+        @"/usr/local/bin/copilot"
+    ]);
+    if (copilot == nil) {
+        completion(nil, TUMProviderError(@"GitHub Copilot CLI (`copilot`) was not found."));
+        return;
+    }
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        int masterFD = -1;
+        struct winsize windowSize = {
+            .ws_row = 24,
+            .ws_col = 100,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0
+        };
+        pid_t child = forkpty(&masterFD, NULL, NULL, &windowSize);
+        if (child < 0) {
+            completion(nil, TUMProviderError(@"Could not start a Copilot pseudo-terminal."));
+            return;
+        }
+        if (child == 0) {
+            chdir(NSHomeDirectory().fileSystemRepresentation);
+            setenv("TERM", "xterm-256color", 1);
+            setenv("NO_COLOR", "1", 1);
+            execl(copilot.fileSystemRepresentation,
+                  copilot.lastPathComponent.UTF8String,
+                  "--no-color",
+                  "--no-remote",
+                  "--no-auto-update",
+                  "--no-custom-instructions",
+                  "--disable-builtin-mcps",
+                  NULL);
+            _exit(127);
+        }
+
+        fcntl(masterFD, F_SETFL, fcntl(masterFD, F_GETFL) | O_NONBLOCK);
+        NSMutableData *captured = [NSMutableData data];
+        NSDate *startedAt = [NSDate date];
+        BOOL sentUsage = NO;
+        TUMProviderUsage *parsedUsage = nil;
+        NSError *parseError = nil;
+
+        while ([[NSDate date] timeIntervalSinceDate:startedAt] < 20.0) {
+            struct pollfd pollDescriptor = {.fd = masterFD, .events = POLLIN, .revents = 0};
+            int pollResult = poll(&pollDescriptor, 1, 250);
+            if (pollResult > 0 && (pollDescriptor.revents & POLLIN)) {
+                uint8_t buffer[8192];
+                ssize_t count = read(masterFD, buffer, sizeof(buffer));
+                if (count > 0) {
+                    [captured appendBytes:buffer length:(NSUInteger)count];
+                    if (captured.length > 1024 * 1024) {
+                        [captured replaceBytesInRange:NSMakeRange(0, captured.length - 1024 * 1024)
+                                           withBytes:NULL
+                                              length:0];
+                    }
+                }
+            }
+
+            NSString *raw = [[NSString alloc] initWithData:captured
+                                                   encoding:NSUTF8StringEncoding];
+            NSString *clean = raw == nil ? @"" : TUMStripTerminalControlSequences(raw);
+            NSTimeInterval elapsed = [[NSDate date] timeIntervalSinceDate:startedAt];
+
+            if ([clean rangeOfString:@"log in" options:NSCaseInsensitiveSearch].location != NSNotFound &&
+                [clean rangeOfString:@"Copilot" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+                parseError = TUMProviderError(
+                    @"Copilot is not signed in. Run `copilot login` first."
+                );
+                break;
+            }
+            if (!sentUsage && elapsed >= 3.0) {
+                const char *command = "/usage\r";
+                write(masterFD, command, strlen(command));
+                sentUsage = YES;
+            }
+            if (sentUsage &&
+                ([clean rangeOfString:@" AIC" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                 [clean rangeOfString:@"premium requests" options:NSCaseInsensitiveSearch].location != NSNotFound)) {
+                parsedUsage = TUMParseCopilotOutput(raw, [NSDate date], &parseError);
+                if (parsedUsage != nil) {
+                    break;
+                }
+            }
+        }
+
+        kill(child, SIGTERM);
+        close(masterFD);
+        waitpid(child, NULL, 0);
+
+        if (parsedUsage == nil && parseError == nil) {
+            NSString *raw = [[NSString alloc] initWithData:captured
+                                                   encoding:NSUTF8StringEncoding];
+            if (raw != nil) {
+                parsedUsage = TUMParseCopilotOutput(raw, [NSDate date], &parseError);
+            }
+        }
+        if (parsedUsage == nil && parseError == nil) {
+            parseError = TUMProviderError(@"Copilot `/usage` timed out. Run `copilot` once to verify login.");
         }
         completion(parsedUsage, parseError);
     });
