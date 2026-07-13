@@ -4,12 +4,12 @@
 
 static NSColor *TUMProviderColor(NSString *providerID) {
     if ([providerID isEqualToString:@"claude"]) {
-        return [NSColor colorWithRed:0.89 green:0.43 blue:0.25 alpha:1.0];
+        return [NSColor colorWithRed:0.94 green:0.35 blue:0.16 alpha:1.0];
     }
     if ([providerID isEqualToString:@"antigravity"]) {
-        return [NSColor colorWithRed:0.40 green:0.58 blue:1.0 alpha:1.0];
+        return [NSColor colorWithRed:0.38 green:0.52 blue:1.0 alpha:1.0];
     }
-    return [NSColor colorWithRed:0.30 green:0.77 blue:0.55 alpha:1.0];
+    return [NSColor colorWithRed:0.57 green:0.36 blue:0.93 alpha:1.0];
 }
 
 static NSString *TUMCardName(TUMProviderUsage *usage) {
@@ -19,6 +19,75 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
     return usage.displayName;
 }
 
+static NSString *TUMProviderGlyph(NSString *providerID) {
+    if ([providerID isEqualToString:@"claude"]) {
+        return @"C";
+    }
+    if ([providerID isEqualToString:@"antigravity"]) {
+        return @"A";
+    }
+    return @"X";
+}
+
+static NSColor *TUMUsageColor(double usedPercent) {
+    if (usedPercent >= 90.0) {
+        return [NSColor colorWithRed:1.0 green:0.31 blue:0.31 alpha:1.0];
+    }
+    if (usedPercent >= 75.0) {
+        return [NSColor colorWithRed:1.0 green:0.66 blue:0.22 alpha:1.0];
+    }
+    return [NSColor colorWithRed:0.36 green:0.88 blue:0.38 alpha:1.0];
+}
+
+static void TUMDrawQuotaRow(NSString *label,
+                            TUMWindowUsage *window,
+                            NSDate *now,
+                            CGFloat y) {
+    NSDictionary *labelAttributes = @{
+        NSFontAttributeName: [NSFont systemFontOfSize:6.5 weight:NSFontWeightSemibold],
+        NSForegroundColorAttributeName: [NSColor colorWithWhite:0.62 alpha:1.0]
+    };
+    NSDictionary *valueAttributes = @{
+        NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:7.2
+                                                             weight:NSFontWeightSemibold],
+        NSForegroundColorAttributeName: NSColor.whiteColor
+    };
+    NSDictionary *resetAttributes = @{
+        NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:6.5
+                                                             weight:NSFontWeightRegular],
+        NSForegroundColorAttributeName: [NSColor colorWithWhite:0.72 alpha:1.0]
+    };
+
+    [label drawInRect:NSMakeRect(98, y, 15, 9) withAttributes:labelAttributes];
+
+    NSRect trackRect = NSMakeRect(115, y + 3.0, 48, 3.5);
+    [[NSColor colorWithWhite:0.23 alpha:1.0] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect:trackRect xRadius:1.75 yRadius:1.75] fill];
+    if (window.available) {
+        CGFloat fillWidth = trackRect.size.width * (window.usedPercent / 100.0);
+        if (fillWidth > 0.0) {
+            if (fillWidth < 1.5) {
+                fillWidth = 1.5;
+            }
+            [TUMUsageColor(window.usedPercent) setFill];
+            NSRect fillRect = NSMakeRect(trackRect.origin.x,
+                                         trackRect.origin.y,
+                                         fillWidth,
+                                         trackRect.size.height);
+            [[NSBezierPath bezierPathWithRoundedRect:fillRect
+                                             xRadius:1.75
+                                             yRadius:1.75] fill];
+        }
+    }
+
+    NSString *percent = window.available
+        ? [NSString stringWithFormat:@"%.0f%%", window.usedPercent]
+        : @"—";
+    NSString *reset = window.available ? TUMResetCountdown(window.resetDate, now) : @"—";
+    [percent drawInRect:NSMakeRect(168, y, 32, 9) withAttributes:valueAttributes];
+    [reset drawInRect:NSMakeRect(202, y, 52, 9) withAttributes:resetAttributes];
+}
+
 @interface TUMUsageCardView () <NSGestureRecognizerDelegate>
 @property (nonatomic, strong) NSClickGestureRecognizer *clickRecognizer;
 @property (nonatomic, strong) NSPanGestureRecognizer *panRecognizer;
@@ -26,7 +95,7 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
 @implementation TUMUsageCardView
 
 - (instancetype)initWithUsage:(TUMProviderUsage *)usage {
-    self = [super initWithFrame:NSMakeRect(0, 0, 218, 30)];
+    self = [super initWithFrame:NSMakeRect(0, 0, 260, 30)];
     if (self) {
         _usage = usage;
         self.wantsLayer = YES;
@@ -44,7 +113,7 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
         _panRecognizer.delegate = self;
         [self addGestureRecognizer:_clickRecognizer];
         [self addGestureRecognizer:_panRecognizer];
-        [self.widthAnchor constraintEqualToConstant:218.0].active = YES;
+        [self.widthAnchor constraintEqualToConstant:260.0].active = YES;
         [self.heightAnchor constraintEqualToConstant:30.0].active = YES;
     }
     return self;
@@ -75,7 +144,7 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
     if (fabs(distance) < 45.0) {
         return;
     }
-    NSInteger positions = (NSInteger)(fabs(distance) / 150.0);
+    NSInteger positions = (NSInteger)(fabs(distance) / 180.0);
     if (positions < 1) {
         positions = 1;
     }
@@ -91,14 +160,34 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
 - (void)drawRect:(NSRect)dirtyRect {
     (void)dirtyRect;
     NSRect bounds = self.bounds;
-    [[NSColor colorWithWhite:0.14 alpha:1.0] setFill];
-    [[NSBezierPath bezierPathWithRoundedRect:bounds xRadius:6 yRadius:6] fill];
+    NSBezierPath *background = [NSBezierPath bezierPathWithRoundedRect:bounds
+                                                               xRadius:5.0
+                                                               yRadius:5.0];
+    [[NSColor colorWithWhite:0.075 alpha:1.0] setFill];
+    [background fill];
+    [[NSColor colorWithWhite:1.0 alpha:0.08] setStroke];
+    background.lineWidth = 0.5;
+    [background stroke];
 
     NSColor *accent = TUMProviderColor(self.usage.providerID);
     [accent setFill];
-    [[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(0, 0, 4, NSHeight(bounds))
-                                     xRadius:2
-                                     yRadius:2] fill];
+    [[NSBezierPath bezierPathWithRoundedRect:NSMakeRect(7, 7, 16, 16)
+                                     xRadius:4
+                                     yRadius:4] fill];
+    NSDictionary *glyphAttributes = @{
+        NSFontAttributeName: [NSFont systemFontOfSize:8.0 weight:NSFontWeightBold],
+        NSForegroundColorAttributeName: NSColor.whiteColor
+    };
+    NSMutableParagraphStyle *centered = [[NSMutableParagraphStyle alloc] init];
+    centered.alignment = NSTextAlignmentCenter;
+    NSMutableDictionary *centeredGlyphAttributes = [glyphAttributes mutableCopy];
+    centeredGlyphAttributes[NSParagraphStyleAttributeName] = centered;
+    [TUMProviderGlyph(self.usage.providerID)
+        drawInRect:NSMakeRect(7, 10, 16, 10)
+        withAttributes:centeredGlyphAttributes];
+
+    [[NSColor colorWithWhite:1.0 alpha:0.10] setFill];
+    NSRectFill(NSMakeRect(92, 5, 0.5, 20));
 
     NSDate *now = [NSDate date];
     NSUInteger groupCount = self.usage.quotaGroups.count;
@@ -112,35 +201,37 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
         ? nil
         : self.usage.quotaGroups[groupIndex];
     NSString *title = TUMCardName(self.usage);
+    NSString *groupName = group != nil ? group.displayName : @"Loading";
     if (groupCount > 1) {
-        title = [NSString stringWithFormat:@"%@ · %@  %lu/%lu",
-                  title,
-                  group.displayName,
-                  (unsigned long)(groupIndex + 1),
-                  (unsigned long)groupCount];
-    }
-    NSString *detail = nil;
-    if (group == nil || (!group.fiveHour.available && !group.sevenDay.available)) {
-        detail = self.usage.errorMessage.length > 0 ? @"Unavailable · tap to retry" : @"Loading…";
-    } else {
-        detail = [NSString stringWithFormat:@"5H %@   7D %@",
-                  TUMCompactWindowText(group.fiveHour, now),
-                  TUMCompactWindowText(group.sevenDay, now)];
+        groupName = [NSString stringWithFormat:@"%@  %lu/%lu",
+                     groupName,
+                     (unsigned long)(groupIndex + 1),
+                     (unsigned long)groupCount];
+    } else if (group == nil && self.usage.errorMessage.length > 0) {
+        groupName = @"Unavailable";
     }
 
     NSDictionary *titleAttributes = @{
-        NSFontAttributeName: [NSFont systemFontOfSize:9.5 weight:NSFontWeightSemibold],
-        NSForegroundColorAttributeName: accent
-    };
-    NSDictionary *detailAttributes = @{
-        NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:8.5
-                                                             weight:NSFontWeightMedium],
+        NSFontAttributeName: [NSFont systemFontOfSize:8.5 weight:NSFontWeightSemibold],
         NSForegroundColorAttributeName: NSColor.whiteColor
     };
-    [title drawInRect:NSMakeRect(10, 16, NSWidth(bounds) - 14, 12)
+    NSDictionary *groupAttributes = @{
+        NSFontAttributeName: [NSFont systemFontOfSize:6.8 weight:NSFontWeightRegular],
+        NSForegroundColorAttributeName: [NSColor colorWithWhite:0.68 alpha:1.0]
+    };
+    [title drawInRect:NSMakeRect(29, 16, 60, 10)
        withAttributes:titleAttributes];
-    [detail drawInRect:NSMakeRect(10, 3, NSWidth(bounds) - 14, 12)
-        withAttributes:detailAttributes];
+    [groupName drawInRect:NSMakeRect(29, 5, 60, 9)
+           withAttributes:groupAttributes];
+
+    TUMWindowUsage *fiveHour = group != nil
+        ? group.fiveHour
+        : [TUMWindowUsage unavailableWithNote:nil];
+    TUMWindowUsage *sevenDay = group != nil
+        ? group.sevenDay
+        : [TUMWindowUsage unavailableWithNote:nil];
+    TUMDrawQuotaRow(@"5H", fiveHour, now, 16);
+    TUMDrawQuotaRow(@"7D", sevenDay, now, 5);
 }
 
 @end

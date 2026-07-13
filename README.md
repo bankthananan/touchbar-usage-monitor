@@ -4,7 +4,7 @@ A small native macOS utility that puts Claude Code, Antigravity, and Codex quota
 
 ![Touch Bar Usage Monitor showing Claude, Antigravity, and Codex quota cards](docs/images/touchbar-preview.png)
 
-Each card shows the percentage **used** for the selected quota group's 5-hour and 7-day/weekly windows, plus the time remaining until reset. A dash means the provider did not return that window.
+Each compact card shows the provider and selected model group beside separate 5H and 7D progress bars, percentage **used**, and time remaining until reset. A dash means the provider did not return that window.
 
 > [!IMPORTANT]
 > This project uses an undocumented AppKit system-modal Touch Bar API. It is intended for personal, local installation and cannot be distributed through the Mac App Store. A future macOS update could break this behavior.

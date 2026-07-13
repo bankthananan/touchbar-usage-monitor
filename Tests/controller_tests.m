@@ -70,6 +70,8 @@ static void TestQuotaGroupCycling(void) {
 static void TestCardAcceptsDirectTouch(void) {
     TUMProviderUsage *usage = TestUsage()[@"claude"];
     TUMUsageCardView *card = [[TUMUsageCardView alloc] initWithUsage:usage];
+    Assert(fabs(card.frame.size.width - 260.0) < 0.01,
+           @"Compact progress layout uses the expected card width");
     Assert(card.gestureRecognizers.count == 2, @"Card installs tap and drag recognizers");
     for (NSGestureRecognizer *recognizer in card.gestureRecognizers) {
         Assert((recognizer.allowedTouchTypes & NSTouchTypeMaskDirect) != 0,
