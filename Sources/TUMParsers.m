@@ -65,11 +65,66 @@ TUMProviderUsage *TUMParseClaudeUsageJSON(NSData *data, NSError **error) {
 
     TUMProviderUsage *usage = [TUMProviderUsage usageForProviderID:@"claude"
                                                        displayName:@"Claude"];
-    usage.fiveHour = TUMClaudeWindow(TUMDictionary(root[@"five_hour"]), 300);
-    usage.sevenDay = TUMClaudeWindow(TUMDictionary(root[@"seven_day"]), 10080);
-    if (!usage.fiveHour.available && !usage.sevenDay.available) {
+    TUMWindowUsage *sharedFiveHour = TUMClaudeWindow(TUMDictionary(root[@"five_hour"]), 300);
+    TUMWindowUsage *overallSevenDay = TUMClaudeWindow(TUMDictionary(root[@"seven_day"]), 10080);
+    NSMutableArray<TUMQuotaGroup *> *groups = [NSMutableArray array];
+
+    if (sharedFiveHour.available || overallSevenDay.available) {
+        TUMQuotaGroup *overall = [TUMQuotaGroup groupWithID:@"overall"
+                                               displayName:@"Overall"];
+        overall.fiveHour = sharedFiveHour;
+        overall.sevenDay = overallSevenDay;
+        [groups addObject:overall];
+    }
+
+    NSDictionary<NSString *, NSString *> *knownNames = @{
+        @"seven_day_sonnet": @"Sonnet",
+        @"seven_day_opus": @"Opus",
+        @"seven_day_oauth_apps": @"OAuth Apps"
+    };
+    NSMutableArray<NSString *> *modelKeys = [NSMutableArray array];
+    for (NSString *key in @[@"seven_day_sonnet", @"seven_day_opus", @"seven_day_oauth_apps"]) {
+        if (root[key] != nil) {
+            [modelKeys addObject:key];
+        }
+    }
+    NSArray<NSString *> *remainingKeys = [[root.allKeys
+        filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id value,
+                                                                          NSDictionary *bindings) {
+            (void)bindings;
+            if (![value isKindOfClass:NSString.class]) {
+                return NO;
+            }
+            NSString *key = value;
+            return [key hasPrefix:@"seven_day_"] &&
+                   ![key isEqualToString:@"seven_day_overage_included"] &&
+                   ![modelKeys containsObject:key];
+        }]] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    [modelKeys addObjectsFromArray:remainingKeys];
+
+    for (NSString *key in modelKeys) {
+        TUMWindowUsage *modelSevenDay = TUMClaudeWindow(TUMDictionary(root[key]), 10080);
+        if (!modelSevenDay.available) {
+            continue;
+        }
+        NSString *suffix = [key substringFromIndex:@"seven_day_".length];
+        NSString *displayName = knownNames[key];
+        if (displayName == nil) {
+            displayName = [[suffix stringByReplacingOccurrencesOfString:@"_" withString:@" "]
+                capitalizedString];
+        }
+        TUMQuotaGroup *modelGroup = [TUMQuotaGroup groupWithID:key
+                                                  displayName:displayName];
+        // Claude's 5-hour session is shared; the weekly window is model-specific.
+        modelGroup.fiveHour = [sharedFiveHour copy];
+        modelGroup.sevenDay = modelSevenDay;
+        [groups addObject:modelGroup];
+    }
+
+    usage.quotaGroups = groups;
+    if (groups.count == 0) {
         if (error != NULL) {
-            *error = TUMParserError(@"Claude response contains no 5-hour or 7-day usage.");
+            *error = TUMParserError(@"Claude response contains no recognized quota windows.");
         }
         return nil;
     }
@@ -277,33 +332,48 @@ TUMProviderUsage *TUMParseAntigravityOutput(NSString *output,
                                             NSDate *now,
                                             NSError **error) {
     NSString *text = TUMStripTerminalControlSequences(output);
-    NSString *group = TUMSection(text, @"CLAUDE AND GPT MODELS", @"Within each group");
-    if (group == nil ||
-        [group rangeOfString:@"Weekly Limit" options:NSCaseInsensitiveSearch].location == NSNotFound) {
-        group = TUMSection(text, @"GEMINI MODELS", @"CLAUDE AND GPT MODELS");
-    }
-    if (group == nil) {
-        if (error != NULL) {
-            *error = TUMParserError(@"Antigravity output contains no quota group.");
-        }
-        return nil;
-    }
-
     TUMProviderUsage *usage = [TUMProviderUsage usageForProviderID:@"antigravity"
                                                        displayName:@"Antigravity"];
-    usage.sevenDay = TUMAntigravityWindow(group,
-                                          @"Weekly Limit",
-                                          @"Five Hour Limit",
-                                          10080,
-                                          now);
-    usage.fiveHour = TUMAntigravityWindow(group,
-                                          @"Five Hour Limit",
-                                          nil,
-                                          300,
-                                          now);
-    if (!usage.fiveHour.available && !usage.sevenDay.available) {
+    NSMutableArray<TUMQuotaGroup *> *groups = [NSMutableArray array];
+    NSArray<NSDictionary<NSString *, NSString *> *> *definitions = @[
+        @{
+            @"start": @"GEMINI MODELS",
+            @"end": @"CLAUDE AND GPT MODELS",
+            @"id": @"gemini",
+            @"name": @"Gemini"
+        },
+        @{
+            @"start": @"CLAUDE AND GPT MODELS",
+            @"end": @"Within each group",
+            @"id": @"other",
+            @"name": @"Other"
+        }
+    ];
+    for (NSDictionary<NSString *, NSString *> *definition in definitions) {
+        NSString *section = TUMSection(text, definition[@"start"], definition[@"end"]);
+        if (section == nil) {
+            continue;
+        }
+        TUMQuotaGroup *group = [TUMQuotaGroup groupWithID:definition[@"id"]
+                                             displayName:definition[@"name"]];
+        group.sevenDay = TUMAntigravityWindow(section,
+                                              @"Weekly Limit",
+                                              @"Five Hour Limit",
+                                              10080,
+                                              now);
+        group.fiveHour = TUMAntigravityWindow(section,
+                                              @"Five Hour Limit",
+                                              nil,
+                                              300,
+                                              now);
+        if (group.fiveHour.available || group.sevenDay.available) {
+            [groups addObject:group];
+        }
+    }
+    usage.quotaGroups = groups;
+    if (groups.count == 0) {
         if (error != NULL) {
-            *error = TUMParserError(@"Antigravity quota group has no readable windows.");
+            *error = TUMParserError(@"Antigravity output has no readable quota groups.");
         }
         return nil;
     }

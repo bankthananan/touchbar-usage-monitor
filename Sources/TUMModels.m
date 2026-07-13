@@ -32,6 +32,29 @@
 
 @end
 
+@implementation TUMQuotaGroup
+
++ (instancetype)groupWithID:(NSString *)groupID
+                displayName:(NSString *)displayName {
+    TUMQuotaGroup *group = [[self alloc] init];
+    group.groupID = groupID;
+    group.displayName = displayName;
+    group.fiveHour = [TUMWindowUsage unavailableWithNote:nil];
+    group.sevenDay = [TUMWindowUsage unavailableWithNote:nil];
+    return group;
+}
+
+- (id)copyWithZone:(NSZone *)zone {
+    TUMQuotaGroup *copy = [[[self class] allocWithZone:zone] init];
+    copy.groupID = self.groupID;
+    copy.displayName = self.displayName;
+    copy.fiveHour = [self.fiveHour copy];
+    copy.sevenDay = [self.sevenDay copy];
+    return copy;
+}
+
+@end
+
 @implementation TUMProviderUsage
 
 + (instancetype)usageForProviderID:(NSString *)providerID
@@ -39,18 +62,47 @@
     TUMProviderUsage *usage = [[self alloc] init];
     usage.providerID = providerID;
     usage.displayName = displayName;
-    usage.fiveHour = [TUMWindowUsage unavailableWithNote:nil];
-    usage.sevenDay = [TUMWindowUsage unavailableWithNote:nil];
+    usage.quotaGroups = @[
+        [TUMQuotaGroup groupWithID:@"default" displayName:@"Overall"]
+    ];
     usage.updatedAt = [NSDate date];
     return usage;
+}
+
+- (TUMQuotaGroup *)primaryQuotaGroup {
+    if (self.quotaGroups.count == 0) {
+        self.quotaGroups = @[
+            [TUMQuotaGroup groupWithID:@"default" displayName:@"Overall"]
+        ];
+    }
+    return self.quotaGroups.firstObject;
+}
+
+- (TUMWindowUsage *)fiveHour {
+    return self.primaryQuotaGroup.fiveHour;
+}
+
+- (void)setFiveHour:(TUMWindowUsage *)fiveHour {
+    self.primaryQuotaGroup.fiveHour = fiveHour;
+}
+
+- (TUMWindowUsage *)sevenDay {
+    return self.primaryQuotaGroup.sevenDay;
+}
+
+- (void)setSevenDay:(TUMWindowUsage *)sevenDay {
+    self.primaryQuotaGroup.sevenDay = sevenDay;
 }
 
 - (id)copyWithZone:(NSZone *)zone {
     TUMProviderUsage *copy = [[[self class] allocWithZone:zone] init];
     copy.providerID = self.providerID;
     copy.displayName = self.displayName;
-    copy.fiveHour = [self.fiveHour copy];
-    copy.sevenDay = [self.sevenDay copy];
+    NSMutableArray<TUMQuotaGroup *> *groups = [NSMutableArray array];
+    for (TUMQuotaGroup *group in self.quotaGroups) {
+        [groups addObject:[group copy]];
+    }
+    copy.quotaGroups = groups;
     copy.updatedAt = self.updatedAt;
     copy.errorMessage = self.errorMessage;
     return copy;

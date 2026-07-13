@@ -5,6 +5,7 @@ CONTENTS_DIR := $(APP_DIR)/Contents
 MACOS_DIR := $(CONTENTS_DIR)/MacOS
 BINARY := $(MACOS_DIR)/$(APP_NAME)
 TEST_BINARY := $(BUILD_DIR)/parser-tests
+CONTROLLER_TEST_BINARY := $(BUILD_DIR)/controller-tests
 SMOKE_BINARY := $(BUILD_DIR)/provider-smoke
 
 CLANG := $(shell xcrun --find clang)
@@ -35,6 +36,12 @@ $(TEST_BINARY): Sources/TUMModels.m Sources/TUMParsers.m Tests/parser_tests.m
 
 test: $(TEST_BINARY)
 	$(TEST_BINARY)
+	$(MAKE) $(CONTROLLER_TEST_BINARY)
+	$(CONTROLLER_TEST_BINARY)
+
+$(CONTROLLER_TEST_BINARY): Sources/TUMModels.m Sources/TUMUsageCardView.m Sources/TUMTouchBarController.m Tests/controller_tests.m
+	mkdir -p $(BUILD_DIR) $(MODULE_CACHE)
+	$(CLANG) $(COMMON_FLAGS) -framework AppKit -framework Foundation $^ -o $@
 
 $(SMOKE_BINARY): Sources/TUMModels.m Sources/TUMParsers.m Sources/TUMProviders.m Tests/provider_smoke.m
 	mkdir -p $(BUILD_DIR) $(MODULE_CACHE)

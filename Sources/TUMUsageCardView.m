@@ -1,5 +1,6 @@
 #import "TUMUsageCardView.h"
 #import "TUMModels.h"
+#import <math.h>
 
 static NSColor *TUMProviderColor(NSString *providerID) {
     if ([providerID isEqualToString:@"claude"]) {
@@ -18,8 +19,9 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
     return usage.displayName;
 }
 
-@interface TUMUsageCardView ()
+@interface TUMUsageCardView () <NSGestureRecognizerDelegate>
 @property (nonatomic, strong) NSClickGestureRecognizer *clickRecognizer;
+@property (nonatomic, strong) NSPanGestureRecognizer *panRecognizer;
 @end
 @implementation TUMUsageCardView
 
@@ -32,7 +34,12 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
         self.layer.masksToBounds = YES;
         _clickRecognizer = [[NSClickGestureRecognizer alloc] initWithTarget:self
                                                                     action:@selector(tapped:)];
+        _panRecognizer = [[NSPanGestureRecognizer alloc] initWithTarget:self
+                                                                 action:@selector(dragged:)];
+        _clickRecognizer.delegate = self;
+        _panRecognizer.delegate = self;
         [self addGestureRecognizer:_clickRecognizer];
+        [self addGestureRecognizer:_panRecognizer];
         [self.widthAnchor constraintEqualToConstant:218.0].active = YES;
         [self.heightAnchor constraintEqualToConstant:30.0].active = YES;
     }
@@ -44,11 +51,37 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
     [self setNeedsDisplay:YES];
 }
 
+- (void)setDisplayedGroupIndex:(NSUInteger)displayedGroupIndex {
+    _displayedGroupIndex = displayedGroupIndex;
+    [self setNeedsDisplay:YES];
+}
+
 - (void)tapped:(NSClickGestureRecognizer *)recognizer {
     (void)recognizer;
     if (self.tapHandler != nil) {
         self.tapHandler();
     }
+}
+
+- (void)dragged:(NSPanGestureRecognizer *)recognizer {
+    if (recognizer.state != NSGestureRecognizerStateEnded || self.reorderHandler == nil) {
+        return;
+    }
+    CGFloat distance = [recognizer translationInView:self].x;
+    if (fabs(distance) < 45.0) {
+        return;
+    }
+    NSInteger positions = (NSInteger)(fabs(distance) / 150.0);
+    if (positions < 1) {
+        positions = 1;
+    }
+    self.reorderHandler(distance < 0 ? -positions : positions);
+}
+
+- (BOOL)gestureRecognizer:(NSGestureRecognizer *)gestureRecognizer
+    shouldRequireFailureOfGestureRecognizer:(NSGestureRecognizer *)otherGestureRecognizer {
+    return gestureRecognizer == self.clickRecognizer &&
+           otherGestureRecognizer == self.panRecognizer;
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -64,14 +97,31 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
                                      yRadius:2] fill];
 
     NSDate *now = [NSDate date];
+    NSUInteger groupCount = self.usage.quotaGroups.count;
+    NSUInteger groupIndex = self.displayedGroupIndex;
+    if (groupCount == 0) {
+        groupIndex = 0;
+    } else if (groupIndex >= groupCount) {
+        groupIndex = groupCount - 1;
+    }
+    TUMQuotaGroup *group = groupCount == 0
+        ? nil
+        : self.usage.quotaGroups[groupIndex];
     NSString *title = TUMCardName(self.usage);
+    if (groupCount > 1) {
+        title = [NSString stringWithFormat:@"%@ · %@  %lu/%lu",
+                  title,
+                  group.displayName,
+                  (unsigned long)(groupIndex + 1),
+                  (unsigned long)groupCount];
+    }
     NSString *detail = nil;
-    if (!self.usage.fiveHour.available && !self.usage.sevenDay.available) {
+    if (group == nil || (!group.fiveHour.available && !group.sevenDay.available)) {
         detail = self.usage.errorMessage.length > 0 ? @"Unavailable · tap to retry" : @"Loading…";
     } else {
         detail = [NSString stringWithFormat:@"5H %@   7D %@",
-                  TUMCompactWindowText(self.usage.fiveHour, now),
-                  TUMCompactWindowText(self.usage.sevenDay, now)];
+                  TUMCompactWindowText(group.fiveHour, now),
+                  TUMCompactWindowText(group.sevenDay, now)];
     }
 
     NSDictionary *titleAttributes = @{

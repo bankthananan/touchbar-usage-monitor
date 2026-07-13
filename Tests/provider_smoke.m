@@ -37,10 +37,13 @@ int main(int argc, const char *argv[]) {
                            provider.providerID.UTF8String,
                            description.UTF8String);
                 } else {
-                    printf("%s  5H %s  7D %s\n",
-                           usage.displayName.UTF8String,
-                           WindowDescription(usage.fiveHour).UTF8String,
-                           WindowDescription(usage.sevenDay).UTF8String);
+                    for (TUMQuotaGroup *group in usage.quotaGroups) {
+                        printf("%s/%s  5H %s  7D %s\n",
+                               usage.displayName.UTF8String,
+                               group.displayName.UTF8String,
+                               WindowDescription(group.fiveHour).UTF8String,
+                               WindowDescription(group.sevenDay).UTF8String);
+                    }
                 }
                 dispatch_semaphore_signal(semaphore);
             }];

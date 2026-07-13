@@ -4,7 +4,7 @@ A small native macOS utility that puts Claude Code, Antigravity, and Codex quota
 
 ![Touch Bar Usage Monitor showing Claude, Antigravity, and Codex quota cards](docs/images/touchbar-preview.png)
 
-Each card shows the percentage **used** for the provider's 5-hour and 7-day/weekly windows, plus the time remaining until reset. A dash means the provider did not return that window.
+Each card shows the percentage **used** for the selected quota group's 5-hour and 7-day/weekly windows, plus the time remaining until reset. A dash means the provider did not return that window.
 
 > [!IMPORTANT]
 > This project uses an undocumented AppKit system-modal Touch Bar API. It is intended for personal, local installation and cannot be distributed through the Mac App Store. A future macOS update could break this behavior.
@@ -51,10 +51,20 @@ make install
 
 - Focus Warp to show the three quota cards on the Touch Bar.
 - Switch away from Warp to restore the next app's Touch Bar.
-- Tap a provider card or the refresh icon to update immediately.
+- Tap a card to cycle through that provider's available quota groups. The card title shows the group and position, such as `Gemini 1/2`.
+- Drag a card horizontally to reorder the providers. The order is saved across launches.
+- Tap the refresh icon to update every provider immediately. Tapping a single-group card, such as Codex, also refreshes.
 - Open the `TB` menu-bar item to see provider errors or choose **Refresh now**.
 
 Refresh intervals are one minute for Claude and Codex, and five minutes for Antigravity. Reset countdowns update whenever fresh provider data arrives.
+
+### Selectable quota groups
+
+| Provider | Groups shown when available |
+| --- | --- |
+| Claude | Overall, Sonnet, Opus, OAuth Apps, and future model-specific `seven_day_*` quotas. Claude's shared 5H session stays visible beside the selected model's weekly quota. |
+| Antigravity | Gemini and Other (the Claude/GPT model group), each with its own 5H and weekly quota. |
+| Codex | The quota windows returned by `codex app-server`; currently a single card state. |
 
 ## What the app reads
 
@@ -62,7 +72,7 @@ Refresh intervals are one minute for Claude and Codex, and five minutes for Anti
 | --- | --- | --- |
 | Claude | Reads the existing Claude Code OAuth record from Keychain with Security.framework. | Calls Anthropic's usage endpoint with the in-memory token. |
 | Codex | Starts `codex app-server --stdio` and requests `account/rateLimits/read`. | The Codex CLI handles its normal account connection. |
-| Antigravity | Opens `agy` in a local pseudo-terminal, runs `/usage`, parses the Claude/GPT group, then exits. | The Antigravity CLI handles its normal account connection. |
+| Antigravity | Opens `agy` in a local pseudo-terminal, runs `/usage`, parses the Gemini and Claude/GPT groups, then exits. | The Antigravity CLI handles its normal account connection. |
 
 Tokens are never logged or written into this repository. Antigravity reports percentage remaining; the app converts it to percentage used so every card is consistent.
 

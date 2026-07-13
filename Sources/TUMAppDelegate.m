@@ -83,6 +83,12 @@
         keyEquivalent:@""];
     apiItem.enabled = NO;
     [self.statusMenu addItem:apiItem];
+    NSMenuItem *gestureItem = [[NSMenuItem alloc]
+        initWithTitle:@"Touch Bar: tap switches quota · drag reorders"
+        action:nil
+        keyEquivalent:@""];
+    gestureItem.enabled = NO;
+    [self.statusMenu addItem:gestureItem];
     [self.statusMenu addItem:NSMenuItem.separatorItem];
     [self.statusMenu addItem:[[NSMenuItem alloc] initWithTitle:@"Quit"
                                                        action:@selector(quit:)
@@ -95,15 +101,22 @@
     NSDate *now = [NSDate date];
     for (NSString *providerID in @[@"claude", @"antigravity", @"codex"]) {
         TUMProviderUsage *providerUsage = usage[providerID];
+        TUMQuotaGroup *group = providerUsage.quotaGroups.firstObject;
         NSString *detail = nil;
-        if (!providerUsage.fiveHour.available && !providerUsage.sevenDay.available) {
+        if (group == nil || (!group.fiveHour.available && !group.sevenDay.available)) {
             detail = providerUsage.errorMessage != nil
                 ? providerUsage.errorMessage
                 : @"Unavailable";
         } else {
-            detail = [NSString stringWithFormat:@"5H %@  ·  7D %@",
-                      TUMCompactWindowText(providerUsage.fiveHour, now),
-                      TUMCompactWindowText(providerUsage.sevenDay, now)];
+            NSString *groupSuffix = providerUsage.quotaGroups.count > 1
+                ? [NSString stringWithFormat:@" (%@ +%lu)",
+                   group.displayName,
+                   (unsigned long)(providerUsage.quotaGroups.count - 1)]
+                : @"";
+            detail = [NSString stringWithFormat:@"5H %@  ·  7D %@%@",
+                      TUMCompactWindowText(group.fiveHour, now),
+                      TUMCompactWindowText(group.sevenDay, now),
+                      groupSuffix];
         }
         self.providerMenuItems[providerID].title = [NSString
             stringWithFormat:@"%@: %@", providerUsage.displayName, detail];

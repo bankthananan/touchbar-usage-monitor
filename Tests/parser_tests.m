@@ -18,13 +18,25 @@ static NSData *JSONData(NSString *json) {
 
 static void TestClaudeParser(void) {
     NSString *json = @"{\"five_hour\":{\"utilization\":0.42,\"resets_at\":\"2026-07-13T12:00:00Z\"},"
-                     "\"seven_day\":{\"utilization\":0.61,\"resets_at\":\"2026-07-18T12:00:00Z\"}}";
+                     "\"seven_day\":{\"utilization\":0.61,\"resets_at\":\"2026-07-18T12:00:00Z\"},"
+                     "\"seven_day_sonnet\":{\"utilization\":0.22,\"resets_at\":\"2026-07-17T12:00:00Z\"},"
+                     "\"seven_day_opus\":{\"utilization\":0.73,\"resets_at\":\"2026-07-16T12:00:00Z\"},"
+                     "\"seven_day_fable_5\":{\"utilization\":0.15,\"resets_at\":\"2026-07-15T12:00:00Z\"}}";
     NSError *error = nil;
     TUMProviderUsage *usage = TUMParseClaudeUsageJSON(JSONData(json), &error);
     Assert(usage != nil && error == nil, @"Claude parser returns usage");
     Assert(fabs(usage.fiveHour.usedPercent - 42.0) < 0.01, @"Claude 5H utilization normalized");
     Assert(fabs(usage.sevenDay.usedPercent - 61.0) < 0.01, @"Claude 7D utilization normalized");
     Assert(usage.fiveHour.resetDate != nil, @"Claude reset date parsed");
+    Assert(usage.quotaGroups.count == 4, @"Claude optional model quota groups parsed");
+    Assert([usage.quotaGroups[1].displayName isEqualToString:@"Sonnet"],
+           @"Claude Sonnet group named");
+    Assert([usage.quotaGroups[2].displayName isEqualToString:@"Opus"],
+           @"Claude Opus group named");
+    Assert([usage.quotaGroups[3].displayName isEqualToString:@"Fable 5"],
+           @"Unknown Claude model group humanized");
+    Assert(fabs(usage.quotaGroups[2].fiveHour.usedPercent - 42.0) < 0.01,
+           @"Claude shared 5H session copied into model group");
 }
 
 static void TestCodexParser(void) {
@@ -51,6 +63,13 @@ static void TestCodexWeeklyOnly(void) {
 
 static void TestAntigravityParser(void) {
     NSString *output = @"\x1b[2J Models & Quota\n"
+                       "GEMINI MODELS\n"
+                       "Weekly Limit\n"
+                       "[██░░░░] 82.00%\n"
+                       "82% remaining · Refreshes in 6d 2h\n"
+                       "Five Hour Limit\n"
+                       "[████░░] 70.00%\n"
+                       "70% remaining · Refreshes in 3h 10m\n"
                        "CLAUDE AND GPT MODELS\n"
                        "Weekly Limit\n"
                        "[████░░] 24.30%\n"
@@ -63,9 +82,15 @@ static void TestAntigravityParser(void) {
     NSError *error = nil;
     TUMProviderUsage *usage = TUMParseAntigravityOutput(output, now, &error);
     Assert(usage != nil && error == nil, @"Antigravity parser returns usage");
-    Assert(fabs(usage.fiveHour.usedPercent - 3.53) < 0.01, @"Antigravity 5H remaining converted to used");
-    Assert(fabs(usage.sevenDay.usedPercent - 75.70) < 0.01, @"Antigravity weekly remaining converted to used");
-    Assert((NSInteger)[usage.fiveHour.resetDate timeIntervalSinceDate:now] == (4 * 3600 + 53 * 60),
+    Assert(usage.quotaGroups.count == 2, @"Both Antigravity model groups parsed");
+    Assert([usage.quotaGroups[0].displayName isEqualToString:@"Gemini"],
+           @"Antigravity Gemini group named");
+    Assert([usage.quotaGroups[1].displayName isEqualToString:@"Other"],
+           @"Antigravity other-model group named");
+    TUMQuotaGroup *other = usage.quotaGroups[1];
+    Assert(fabs(other.fiveHour.usedPercent - 3.53) < 0.01, @"Antigravity 5H remaining converted to used");
+    Assert(fabs(other.sevenDay.usedPercent - 75.70) < 0.01, @"Antigravity weekly remaining converted to used");
+    Assert((NSInteger)[other.fiveHour.resetDate timeIntervalSinceDate:now] == (4 * 3600 + 53 * 60),
            @"Antigravity 5H countdown parsed");
 }
 

@@ -17,10 +17,24 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+@interface TUMQuotaGroup : NSObject <NSCopying>
+
+@property (nonatomic, copy) NSString *groupID;
+@property (nonatomic, copy) NSString *displayName;
+@property (nonatomic, strong) TUMWindowUsage *fiveHour;
+@property (nonatomic, strong) TUMWindowUsage *sevenDay;
+
++ (instancetype)groupWithID:(NSString *)groupID
+                displayName:(NSString *)displayName;
+
+@end
+
 @interface TUMProviderUsage : NSObject <NSCopying>
 
 @property (nonatomic, copy) NSString *providerID;
 @property (nonatomic, copy) NSString *displayName;
+@property (nonatomic, copy) NSArray<TUMQuotaGroup *> *quotaGroups;
+// Convenience accessors for the first quota group.
 @property (nonatomic, strong) TUMWindowUsage *fiveHour;
 @property (nonatomic, strong) TUMWindowUsage *sevenDay;
 @property (nonatomic, copy) NSDate *updatedAt;
