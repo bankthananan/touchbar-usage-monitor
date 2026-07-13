@@ -3,6 +3,7 @@
 
 #import "TUMModels.h"
 #import "TUMTouchBarController.h"
+#import "TUMUsageCardView.h"
 
 static int failures = 0;
 
@@ -66,10 +67,21 @@ static void TestQuotaGroupCycling(void) {
            @"Quota group selection wraps around");
 }
 
+static void TestCardAcceptsDirectTouch(void) {
+    TUMProviderUsage *usage = TestUsage()[@"claude"];
+    TUMUsageCardView *card = [[TUMUsageCardView alloc] initWithUsage:usage];
+    Assert(card.gestureRecognizers.count == 2, @"Card installs tap and drag recognizers");
+    for (NSGestureRecognizer *recognizer in card.gestureRecognizers) {
+        Assert((recognizer.allowedTouchTypes & NSTouchTypeMaskDirect) != 0,
+               @"Card recognizer accepts physical Touch Bar direct touches");
+    }
+}
+
 int main(void) {
     @autoreleasepool {
         TestSavedOrderNormalizationAndReorder();
         TestQuotaGroupCycling();
+        TestCardAcceptsDirectTouch();
         [NSUserDefaults.standardUserDefaults removeObjectForKey:@"TUMProviderOrder"];
         [NSUserDefaults.standardUserDefaults removeObjectForKey:@"TUMSelectedQuotaGroups"];
         if (failures == 0) {

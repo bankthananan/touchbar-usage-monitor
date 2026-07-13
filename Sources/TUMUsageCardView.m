@@ -36,6 +36,10 @@ static NSString *TUMCardName(TUMProviderUsage *usage) {
                                                                     action:@selector(tapped:)];
         _panRecognizer = [[NSPanGestureRecognizer alloc] initWithTarget:self
                                                                  action:@selector(dragged:)];
+        // Touch Bar input is NSTouchTypeDirect. Gesture recognizers default to
+        // no allowed touch types, so they otherwise ignore physical bar taps.
+        _clickRecognizer.allowedTouchTypes = NSTouchTypeMaskDirect;
+        _panRecognizer.allowedTouchTypes = NSTouchTypeMaskDirect;
         _clickRecognizer.delegate = self;
         _panRecognizer.delegate = self;
         [self addGestureRecognizer:_clickRecognizer];

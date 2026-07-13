@@ -78,7 +78,7 @@ NSString *TUMFindExecutable(NSArray<NSString *> *candidates) {
     forHTTPHeaderField:@"Authorization"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"oauth-2025-04-20" forHTTPHeaderField:@"anthropic-beta"];
-    [request setValue:@"TouchBarUsageMonitor/0.2.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"TouchBarUsageMonitor/0.2.1" forHTTPHeaderField:@"User-Agent"];
 
     NSURLSessionDataTask *task = [NSURLSession.sharedSession
         dataTaskWithRequest:request
@@ -198,7 +198,7 @@ NSString *TUMFindExecutable(NSArray<NSString *> *candidates) {
                 @"clientInfo": @{
                     @"name": @"touchbar_usage_monitor",
                     @"title": @"Touch Bar Usage Monitor",
-                    @"version": @"0.2.0"
+                    @"version": @"0.2.1"
                 },
                 @"capabilities": @{
                     @"optOutNotificationMethods": @[
